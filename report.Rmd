@@ -1,0 +1,263 @@
+---
+title: "Practical Machine Learning Project - Report"
+author: "Harkishan Grewal"
+date: "12/31/2020"
+output:
+  html_document
+---
+
+### Load Required Libraries
+
+```{r}
+library(caret)
+library(rpart)
+library(rpart.plot)
+library(RColorBrewer)
+library(rattle)
+library(randomForest)
+library(knitr)
+```
+
+
+# Background
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible 
+to collect a large amount of data about personal activity relatively 
+inexpensively. These type of devices are part of the quantified self movement 
+– a group of enthusiasts who take measurements about themselves regularly to 
+improve their health, to find patterns in their behavior, or because they are 
+tech geeks. One thing that people regularly do is quantify how much of a 
+particular activity they do, but they rarely quantify how well they do it.
+
+In this project, I will use the data from accelerometers on the belt, 
+forearm, arm, and dumbell of 6 participants. The participants were asked to 
+perform barbell lifts correctly and incorrectly in 5 different ways.
+More information is available from the website here:
+http://web.archive.org/web/20161224072740/http:/groupware.les.inf.puc-rio.br/har
+(see the section on the Weight Lifting Exercise Dataset).
+
+
+# Data
+
+The training data for this project are available here:
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+
+The test data are available here:
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+The data for this project come from this source: http://web.archive.org/web/20161224072740/http:/groupware.les.inf.puc-rio.br/har.
+Please cite the source if their data is used.
+
+
+## Data Preprocessing
+
+### Download the Data
+
+Here I download the data, if it is not downloaded already.
+
+```{r}
+trainUrl <-"https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+testUrl <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+trainFile <- "./pml-training.csv"
+testFile  <- "./pml-testing.csv"
+
+# Download training data file if not downloaded already
+if (!file.exists(trainFile)) {
+  download.file(trainUrl, destfile=trainFile, method="curl")
+}
+
+# Download testing data file if not downloaded already
+if (!file.exists(testFile)) {
+  download.file(testUrl, destfile=testFile, method="curl")
+}
+```
+
+
+### Read the Data
+
+After downloading the data from the data source, I read the data from the two 
+files.
+
+```{r}
+trainRaw <- read.csv("./pml-training.csv", na.strings = c("NA","#DIV/0!",""))
+testRaw <- read.csv("./pml-testing.csv", na.strings=c("NA","#DIV/0!",""))
+```
+
+As shown below, the training dataset has 19622 observations and 160 variables.
+The testing dataset has 20 observations and 160 variables.
+
+```{r}
+dim(trainRaw)
+dim(testRaw)
+```
+
+
+### Split the Data
+
+Next, I prepare the data for prediction by splitting the training data into a 
+training set and a testing set. The ratio of training to testing data is 70-30. 
+
+```{r}
+set.seed(2021)
+train <- createDataPartition(trainRaw$classe, p = 0.7, list = FALSE)
+trainData <- trainRaw[train, ]
+testData <- trainRaw[-train, ]
+```
+
+The dimensions of the datasets after the split are shown below.
+
+```{r}
+dim(trainData)
+dim(testData)
+```
+
+### Clean the Data
+
+I remove near-zero-variance (NZV) variables from train and test data.
+
+```{r}
+nzv <- nearZeroVar(trainData, saveMetrics = TRUE)
+trainData <- trainData[, nzv$nzv == FALSE]
+
+nzv <- nearZeroVar(testData, saveMetrics = TRUE)
+testData <- testData[, nzv$nzv == FALSE]
+```
+
+The dimensions of the datasets after near-zero-variance variables are shown 
+below.
+
+```{r}
+dim(trainData)
+dim(testData)
+```
+
+I clean the data by removing variables that contain missing values.
+
+```{r}
+trainData <- trainData[c(-1)]
+tempTrain <- trainData
+for(i in 1:length(trainData)){
+    if(sum(is.na(trainData[, i])) / nrow(trainData) >= 0.7){
+        for(j in 1:length(tempTrain)){
+            if(length(grep(names(trainData[i]), names(tempTrain)[j])) == 1){
+                tempTrain <- tempTrain[, -j]
+            }
+        }
+    }
+}
+
+trainData <- tempTrain
+rm(tempTrain)
+```
+
+The dimensions of the datasets after removing variables containing missing 
+values are shown below.
+
+```{r}
+dim(trainData)
+dim(testData)
+```
+
+Transform the test data set and the raw test data set to have same dimensions 
+as the training set after removing NA's.
+
+```{r}
+header <- colnames(trainData)
+header1 <- colnames(trainData[, -58])
+testData <- testData[header]
+testRaw <- testRaw[header1]
+```
+
+The dimensions of the datasets after transform are shown below.
+
+```{r}
+dim(trainData)
+dim(testData)
+dim(testRaw)
+```
+
+Next, I coerce the data into the same data type.
+
+```{r}
+for (i in 1:length(testRaw)){
+    for(j in 1:length(trainData)){
+        if(length(grep(names(trainData[i]), names(testRaw)[j])) == 1){
+            class(testRaw[j]) <- class(trainData[i])
+        }
+    }
+}
+
+testRaw <- rbind(trainData[2, -58] , testRaw)
+testRaw <- testRaw[-1, ]
+```
+
+
+## Build a Model
+
+I will use decision trees, random forests, and generalized boosted model 
+algorithms to build a model.
+
+### Decision Trees Model
+
+Now, I create a decision tree model and plot the tree as a dendogram.
+
+```{r}
+dtm <- rpart(classe ~ ., data = trainData, method = "class")
+fancyRpartPlot(dtm)
+```
+
+Next, I test the classification tree model on the test data.
+
+```{r}
+predictDTM <- predict(dtm, testData, type = "class")
+cmDTM <- confusionMatrix(predictDTM, as.factor(testData$classe))
+cmDTM
+
+plot(cmDTM$table, col = cmDTM$byClass,
+     main = paste("Decision Tree - Accuracy: ", round(cmDTM$overall['Accuracy'], 4)))
+```
+
+
+### Random Forest
+
+Now, I create a random forest model.
+
+```{r, cache=TRUE}
+trainData$classe = factor(trainData$classe)
+rf <- randomForest(classe ~ ., data = trainData)
+predictRF <- predict(rf, testData, type = "class")
+cmRF <- confusionMatrix(predictRF, as.factor(testData$classe))
+cmRF
+
+plot(cmRF$table, col = cmRF$byClass,
+     main = paste("Random Forest - Accuracy: ", round(cmRF$overall['Accuracy'], 4)))
+```
+
+
+### Generalized Boosted Regression
+
+Lastly, I create a generalized boosted regression model.
+
+```{r, cache=TRUE}
+control <- trainControl(method = "repeatedcv", number = 5, repeats = 1)
+gbm <- train(classe ~ ., data = trainData, method = "gbm", trControl = control,
+                 verbose = FALSE)
+
+predictGBM <- predict(gbm, testData)
+cmGBM <- confusionMatrix(predictGBM, as.factor(testData$classe))
+cmGBM
+
+plot(cmGBM$table, col = cmGBM$byClass,
+     main = paste("Generalized Boosted Regression - Accuracy: ", round(cmGBM$overall['Accuracy'], 4)))
+```
+
+
+## Test Data
+
+Since Random Forest model had the highest accuracy, I will use it to predict 
+the test data from the source.
+
+```{r}
+predict <- predict(rf, testRaw, type = "class")
+predict
+```

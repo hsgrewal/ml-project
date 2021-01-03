@@ -79,8 +79,8 @@ After downloading the data from the data source, I read the data from the two
 files.
 
 ```{r}
-trainRaw <- read.csv("./pml-training.csv", na.strings = c("NA","#DIV/0!",""))
-testRaw <- read.csv("./pml-testing.csv", na.strings=c("NA","#DIV/0!",""))
+trainRaw <- read.csv("./pml-training.csv")
+testRaw <- read.csv("./pml-testing.csv")
 ```
 
 As shown below, the training dataset has 19622 observations and 160 variables.
@@ -92,6 +92,55 @@ dim(testRaw)
 ```
 
 
+### Clean the Data
+
+First, I remove the variables containing missing values.
+
+```{r}
+trainData <- trainRaw[, colSums(is.na(trainRaw)) == 0]
+testRaw <- testRaw[, colSums(is.na(testRaw)) == 0]
+```
+
+The dimensions of the datasets after removing variables with missing values are 
+shown below.
+
+```{r}
+dim(trainData)
+dim(testRaw)
+```
+
+Next, I remove the first seven variables because they have little impact on 
+**classe**.
+
+```{r}
+trainData <- trainData[, -c(1:7)]
+testRaw <- testRaw[, -c(1:7)]
+```
+
+
+The dimensions of the datasets after removing low impact variables are 
+shown below.
+
+```{r}
+dim(trainData)
+dim(testRaw)
+```
+
+Lastly, I remove near-zero-variance (NZV) variables from data.
+
+```{r}
+nzv <- nearZeroVar(trainData)
+trainData <- trainData[, -nzv]
+```
+
+The dimensions of the datasets after removing near-zero-variance variables are shown 
+below.
+
+```{r}
+dim(trainData)
+```
+
+
 ### Split the Data
 
 Next, I prepare the data for prediction by splitting the training data into a 
@@ -99,9 +148,9 @@ training set and a testing set. The ratio of training to testing data is 70-30.
 
 ```{r}
 set.seed(2021)
-train <- createDataPartition(trainRaw$classe, p = 0.7, list = FALSE)
-trainData <- trainRaw[train, ]
-testData <- trainRaw[-train, ]
+train <- createDataPartition(trainData$classe, p = 0.7, list = FALSE)
+trainData <- trainData[train, ]
+testData <- trainData[-train, ]
 ```
 
 The dimensions of the datasets after the split are shown below.
@@ -109,86 +158,6 @@ The dimensions of the datasets after the split are shown below.
 ```{r}
 dim(trainData)
 dim(testData)
-```
-
-### Clean the Data
-
-I remove near-zero-variance (NZV) variables from train and test data.
-
-```{r}
-nzv <- nearZeroVar(trainData, saveMetrics = TRUE)
-trainData <- trainData[, nzv$nzv == FALSE]
-
-nzv <- nearZeroVar(testData, saveMetrics = TRUE)
-testData <- testData[, nzv$nzv == FALSE]
-```
-
-The dimensions of the datasets after near-zero-variance variables are shown 
-below.
-
-```{r}
-dim(trainData)
-dim(testData)
-```
-
-I clean the data by removing variables that contain missing values.
-
-```{r}
-trainData <- trainData[c(-1)]
-tempTrain <- trainData
-for(i in 1:length(trainData)){
-    if(sum(is.na(trainData[, i])) / nrow(trainData) >= 0.7){
-        for(j in 1:length(tempTrain)){
-            if(length(grep(names(trainData[i]), names(tempTrain)[j])) == 1){
-                tempTrain <- tempTrain[, -j]
-            }
-        }
-    }
-}
-
-trainData <- tempTrain
-rm(tempTrain)
-```
-
-The dimensions of the datasets after removing variables containing missing 
-values are shown below.
-
-```{r}
-dim(trainData)
-dim(testData)
-```
-
-Transform the test data set and the raw test data set to have same dimensions 
-as the training set after removing NA's.
-
-```{r}
-header <- colnames(trainData)
-header1 <- colnames(trainData[, -58])
-testData <- testData[header]
-testRaw <- testRaw[header1]
-```
-
-The dimensions of the datasets after transform are shown below.
-
-```{r}
-dim(trainData)
-dim(testData)
-dim(testRaw)
-```
-
-Next, I coerce the data into the same data type.
-
-```{r}
-for (i in 1:length(testRaw)){
-    for(j in 1:length(trainData)){
-        if(length(grep(names(trainData[i]), names(testRaw)[j])) == 1){
-            class(testRaw[j]) <- class(trainData[i])
-        }
-    }
-}
-
-testRaw <- rbind(trainData[2, -58] , testRaw)
-testRaw <- testRaw[-1, ]
 ```
 
 
@@ -255,7 +224,8 @@ plot(cmGBM$table, col = cmGBM$byClass,
 ## Test Data
 
 Since Random Forest model had the highest accuracy, I will use it to predict 
-the test data from the source. The model has an accuracy of **0.9995** so the out-of-sample rate is 100 - 99.95 = **0.05 %**. 
+the test data from the source. The model has an accuracy of **1** so the 
+out-of-sample rate is 100 - 100 = **0 %**. 
 
 ```{r}
 predict <- predict(rf, testRaw, type = "class")

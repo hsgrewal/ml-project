@@ -255,7 +255,7 @@ plot(cmGBM$table, col = cmGBM$byClass,
 ## Test Data
 
 Since Random Forest model had the highest accuracy, I will use it to predict 
-the test data from the source.
+the test data from the source. The model has an accuracy of **0.9995** so the out-of-sample rate is 100 - 99.95 = **0.05 %**. 
 
 ```{r}
 predict <- predict(rf, testRaw, type = "class")
